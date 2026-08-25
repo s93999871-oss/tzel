@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Моя цель на курс</title>
+
+<!-- Весь текст — Montserrat (бренд-хаб EOS) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<style>
+[hidden]{ display:none !important; }
+
+:root{
+  --card:#F6F6F6;        /* фон карточки */
+  --ink:#1A0A0F;         /* основной текст */
+  --muted:#808080;       /* подписи */
+  --line:#B0B0B0;        /* рамка поля */
+  --accent:#E30613;      /* красный акцент */
+  --accent-dark:#C00510;
+  --teal:#2E8B8F;        /* бирюза фокуса и статуса */
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; background:#FFFFFF; }
+body{
+  font-family:"Montserrat",system-ui,sans-serif;
+  font-size:16px; line-height:1.5; color:var(--ink);
+  padding:24px;
+}
+
+/* карточка цели */
+.goal{
+  max-width:860px; margin:0 auto;
+  background:var(--card); border-radius:16px;
+  padding:clamp(24px,4vw,40px) clamp(20px,4vw,44px);
+}
+
+/* заголовок с красной точкой-маркером */
+.goal__label{
+  display:flex; align-items:center; gap:10px;
+  font-weight:800; font-size:20px; line-height:1.4;
+  margin:0 0 14px;
+}
+.goal__label .rdot{
+  flex:none; width:6px; height:6px; border-radius:50%;
+  background:var(--accent);
+}
+
+/* поле ввода */
+.goal__input{
+  width:100%; min-height:130px; resize:vertical;
+  padding:14px 16px;
+  border:1px solid var(--line); border-radius:12px;
+  background:#FFFFFF; color:var(--ink);
+  font:400 16px/1.5 "Montserrat",system-ui,sans-serif;
+  transition:border-color .24s, box-shadow .24s;
+}
+.goal__input::placeholder{ color:var(--muted); }
+/* фокус — бирюзовая рамка 2 px */
+.goal__input:focus{
+  outline:none; border-color:var(--teal);
+  box-shadow:inset 0 0 0 1px var(--teal);
+}
+
+/* счётчик символов */
+.goal__counter{ margin:10px 0 0; font-size:13px; color:var(--muted); }
+
+/* кнопка: серая → красная при ≥ 10 символов */
+.goal__btn{
+  margin-top:18px;
+  font:700 16px "Montserrat",system-ui,sans-serif;
+  padding:15px 30px; border:0; border-radius:12px; cursor:pointer;
+  background:var(--card); color:var(--muted);
+  transition:background .24s, color .24s;
+}
+.goal__btn:not(:disabled){ background:var(--accent); color:#FFFFFF; }
+.goal__btn:not(:disabled):hover{ background:var(--accent-dark); }
+.goal__btn:disabled{ cursor:not-allowed; }
+.goal__btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+/* статус сохранения */
+.goal__status{ margin:14px 0 0; font-size:13px; font-weight:600; color:var(--teal); }
+
+/* мотивирующая фраза */
+.goal__phrase{
+  margin:8px 0 0; font-size:16px; font-weight:500; color:var(--ink);
+  animation:phIn 300ms ease both;
+}
+@keyframes phIn{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+
+@media (max-width:560px){
+  body{ padding:16px; }
+  .goal__btn{ width:100%; }
+}
+@media (prefers-reduced-motion:reduce){
+  *{ animation:none !important; transition:none !important; }
+}
+</style>
+</head>
+<body>
+
+<section class="goal" aria-label="Моя цель на курс">
+  <label class="goal__label" for="goalInput">Моя цель на курс<span class="rdot" aria-hidden="true"></span></label>
+  <textarea class="goal__input" id="goalInput"
+    placeholder="Например: хочу быстрее писать деловые письма..."></textarea>
+  <p class="goal__counter" id="goalCounter" aria-live="polite">0 символов — минимум 10</p>
+
+  <button class="goal__btn" id="goalBtn" type="button" disabled aria-disabled="true">Сохранить цель</button>
+
+  <p class="goal__status" id="goalStatus" hidden></p>
+  <p class="goal__phrase" id="goalPhrase" hidden>Цель есть. Дальше — интереснее.</p>
+</section>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ КУДА ОТПРАВЛЯТЬ (заполни ОДИН вариант) ============
+     Telegram: токен от @BotFather + твой chat_id от @userinfobot */
+  var TG_TOKEN = "";
+  var TG_CHAT  = "";
+  /* Или Google Sheets через Apps Script (веб-приложение, доступ «Все»): */
+  var WEBHOOK_URL = "";
+
+  var input   = document.getElementById('goalInput');
+  var counter = document.getElementById('goalCounter');
+  var btn     = document.getElementById('goalBtn');
+  var status  = document.getElementById('goalStatus');
+  var phrase  = document.getElementById('goalPhrase');
+
+  /* localStorage безопасно: iframe iSpring может его запрещать */
+  function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+  var lastSent = load('eos-goal-sent') || '';
+
+  /* счётчик символов */
+  function updateCounter(){
+    var len = input.value.trim().length;
+    counter.textContent = len < 10
+      ? len + ' символов — минимум 10'
+      : len + ' символов — отлично';
+  }
+
+  /* кнопка: видима, активна при ≥ 10 символов */
+  function updateBtn(){
+    var ok = input.value.trim().length >= 10;
+    btn.hidden = false;
+    btn.disabled = !ok;
+    btn.setAttribute('aria-disabled', String(!ok));
+    if (ok) btn.textContent = 'Сохранить цель';
+  }
+
+  /* показ сохранённого состояния: статус + фраза, кнопка уходит */
+  function showSaved(ok){
+    status.hidden = false;
+    status.textContent = ok ? '✓ Цель сохранена и отправлена тренеру'
+                            : '✓ Цель сохранена';
+    phrase.hidden = false;
+    btn.hidden = true;
+  }
+
+  /* отправка данных */
+  function sendGoal(text){
+    var payload = { goal:text, time:new Date().toISOString() };
+    if (WEBHOOK_URL){ /* Google Sheets / любой вебхук */
+      return fetch(WEBHOOK_URL, {
+        method:'POST', mode:'no-cors',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body:JSON.stringify(payload)
+      }).then(function(){ return true; }).catch(function(){ return false; });
+    }
+    if (TG_TOKEN && TG_CHAT){ /* Telegram */
+      return fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ chat_id:TG_CHAT, text:'🎯 Цель на курс:\n' + text })
+      }).then(function(r){ return r.ok; }).catch(function(){ return false; });
+    }
+    return Promise.resolve(false); /* отправка не настроена */
+  }
+
+  /* клик по кнопке */
+  btn.addEventListener('click', function(){
+    var text = input.value.trim();
+    if (text.length < 10) return;
+
+    /* ту же цель повторно не шлём */
+    if (text === lastSent){ showSaved(true); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    sendGoal(text).then(function(ok){
+      lastSent = text;
+      save('eos-goal-sent', text);
+      showSaved(ok);
+    });
+  });
+
+  /* ввод: черновик + счётчик + возврат кнопки */
+  input.addEventListener('input', function(){
+    save('eos-goal-text', input.value);
+    updateCounter();
+    updateBtn();
+  });
+
+  /* восстановление при возврате к блоку */
+  input.value = load('eos-goal-text') || '';
+  updateCounter();
+  if (input.value.trim() && input.value.trim() === lastSent){
+    showSaved(true);               /* вернулся к уже сохранённой цели */
+  } else {
+    updateBtn();
+  }
+})();
+</script>
+</body>
+</html>
