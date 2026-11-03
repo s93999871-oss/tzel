@@ -65,10 +65,7 @@ body{
   box-shadow:inset 0 0 0 1px var(--teal);
 }
 
-/* счётчик символов */
-.goal__counter{ margin:10px 0 0; font-size:13px; color:var(--muted); }
-
-/* кнопка: серая → красная при ≥ 10 символов */
+/* кнопка: серая → красная, когда текст готов */
 .goal__btn{
   margin-top:18px;
   font:700 16px "Montserrat",system-ui,sans-serif;
@@ -106,7 +103,6 @@ body{
   <label class="goal__label" for="goalInput">Моя цель на курс<span class="rdot" aria-hidden="true"></span></label>
   <textarea class="goal__input" id="goalInput"
     placeholder="Например: хочу быстрее писать деловые письма..."></textarea>
-  <p class="goal__counter" id="goalCounter" aria-live="polite">0 символов — минимум 10</p>
 
   <button class="goal__btn" id="goalBtn" type="button" disabled aria-disabled="true">Сохранить цель</button>
 
@@ -119,15 +115,9 @@ body{
   "use strict";
 
   /* ============ НАСТРОЙКИ ОТПРАВКИ ============ */
-  // Вставь сюда ссылку на веб-приложение из Шага 2 (она заканчивается на /exec)
   var WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbw18Ryi_HZOPnyZN6spghCJlsHboWRGdBN0_EYxWShyeJm1VkfQ_rnfuICPUoFcSP51vA/exec";
-  
-  // Если нужен Telegram, раскомментируй и заполни, но WEBHOOK_URL должен быть пустым, чтобы сработал Telegram
-  // var TG_TOKEN = "";
-  // var TG_CHAT  = "";
 
   var input   = document.getElementById('goalInput');
-  var counter = document.getElementById('goalCounter');
   var btn     = document.getElementById('goalBtn');
   var status  = document.getElementById('goalStatus');
   var phrase  = document.getElementById('goalPhrase');
@@ -137,13 +127,7 @@ body{
 
   var lastSent = load('eos-goal-sent') || '';
 
-  function updateCounter(){
-    var len = input.value.trim().length;
-    counter.textContent = len < 10
-      ? len + ' символов — минимум 10'
-      : len + ' символов — отлично';
-  }
-
+  // Тихая проверка: активируем кнопку, только если введено 10 и более знаков
   function updateBtn(){
     var ok = input.value.trim().length >= 10;
     btn.hidden = false;
@@ -152,10 +136,9 @@ body{
     if (ok) btn.textContent = 'Сохранить цель';
   }
 
-  function showSaved(ok){
+  function showSaved(){
     status.hidden = false;
-    status.textContent = ok ? '✓ Цель сохранена и отправлена тренеру'
-                            : '✓ Цель сохранена';
+    status.textContent = '✓ Цель зафиксирована';
     phrase.hidden = false;
     btn.hidden = true;
   }
@@ -170,15 +153,6 @@ body{
       }).then(function(r) { return r.ok; }).catch(function() { return false; });
     }
     
-    // Резервный вариант для Telegram, если Google Sheets не используется
-    if (typeof TG_TOKEN !== 'undefined' && TG_TOKEN && TG_CHAT){
-      return fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json' },
-        body:JSON.stringify({ chat_id:TG_CHAT, text:'🎯 Цель на курс:\n' + text })
-      }).then(function(r){ return r.ok; }).catch(function(){ return false; });
-    }
-    
     return Promise.resolve(false);
   }
 
@@ -186,7 +160,7 @@ body{
     var text = input.value.trim();
     if (text.length < 10) return;
 
-    if (text === lastSent){ showSaved(true); return; }
+    if (text === lastSent){ showSaved(); return; }
 
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
@@ -194,20 +168,19 @@ body{
     sendGoal(text).then(function(ok){
       lastSent = text;
       save('eos-goal-sent', text);
-      showSaved(ok);
+      showSaved();
     });
   });
 
   input.addEventListener('input', function(){
     save('eos-goal-text', input.value);
-    updateCounter();
     updateBtn();
   });
 
+  // Восстановление при возврате к блоку
   input.value = load('eos-goal-text') || '';
-  updateCounter();
   if (input.value.trim() && input.value.trim() === lastSent){
-    showSaved(true);
+    showSaved();
   } else {
     updateBtn();
   }
