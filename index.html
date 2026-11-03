@@ -118,12 +118,13 @@ body{
 (function(){
   "use strict";
 
-  /* ============ КУДА ОТПРАВЛЯТЬ (заполни ОДИН вариант) ============
-     Telegram: токен от @BotFather + твой chat_id от @userinfobot */
-  var TG_TOKEN = "";
-  var TG_CHAT  = "";
-  /* Или Google Sheets через Apps Script (веб-приложение, доступ «Все»): */
-  var WEBHOOK_URL = "";
+  /* ============ НАСТРОЙКИ ОТПРАВКИ ============ */
+  // Вставь сюда ссылку на веб-приложение из Шага 2 (она заканчивается на /exec)
+  var WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbw18Ryi_HZOPnyZN6spghCJlsHboWRGdBN0_EYxWShyeJm1VkfQ_rnfuICPUoFcSP51vA/exec";
+  
+  // Если нужен Telegram, раскомментируй и заполни, но WEBHOOK_URL должен быть пустым, чтобы сработал Telegram
+  // var TG_TOKEN = "";
+  // var TG_CHAT  = "";
 
   var input   = document.getElementById('goalInput');
   var counter = document.getElementById('goalCounter');
@@ -131,13 +132,11 @@ body{
   var status  = document.getElementById('goalStatus');
   var phrase  = document.getElementById('goalPhrase');
 
-  /* localStorage безопасно: iframe iSpring может его запрещать */
   function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
   function save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 
   var lastSent = load('eos-goal-sent') || '';
 
-  /* счётчик символов */
   function updateCounter(){
     var len = input.value.trim().length;
     counter.textContent = len < 10
@@ -145,7 +144,6 @@ body{
       : len + ' символов — отлично';
   }
 
-  /* кнопка: видима, активна при ≥ 10 символов */
   function updateBtn(){
     var ok = input.value.trim().length >= 10;
     btn.hidden = false;
@@ -154,7 +152,6 @@ body{
     if (ok) btn.textContent = 'Сохранить цель';
   }
 
-  /* показ сохранённого состояния: статус + фраза, кнопка уходит */
   function showSaved(ok){
     status.hidden = false;
     status.textContent = ok ? '✓ Цель сохранена и отправлена тренеру'
@@ -163,36 +160,37 @@ body{
     btn.hidden = true;
   }
 
-  /* отправка данных */
   function sendGoal(text){
-    var payload = { goal:text, time:new Date().toISOString() };
-    if (WEBHOOK_URL){ /* Google Sheets / любой вебхук */
+    var payload = { goal: text, time: new Date().toISOString() };
+    
+    if (WEBHOOK_URL && WEBHOOK_URL.startsWith("https://script.google.com/")) {
       return fetch(WEBHOOK_URL, {
-        method:'POST', mode:'no-cors',
-        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-        body:JSON.stringify(payload)
-      }).then(function(){ return true; }).catch(function(){ return false; });
+        method: 'POST',
+        body: JSON.stringify(payload)
+      }).then(function(r) { return r.ok; }).catch(function() { return false; });
     }
-    if (TG_TOKEN && TG_CHAT){ /* Telegram */
+    
+    // Резервный вариант для Telegram, если Google Sheets не используется
+    if (typeof TG_TOKEN !== 'undefined' && TG_TOKEN && TG_CHAT){
       return fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body:JSON.stringify({ chat_id:TG_CHAT, text:'🎯 Цель на курс:\n' + text })
       }).then(function(r){ return r.ok; }).catch(function(){ return false; });
     }
-    return Promise.resolve(false); /* отправка не настроена */
+    
+    return Promise.resolve(false);
   }
 
-  /* клик по кнопке */
   btn.addEventListener('click', function(){
     var text = input.value.trim();
     if (text.length < 10) return;
 
-    /* ту же цель повторно не шлём */
     if (text === lastSent){ showSaved(true); return; }
 
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
+    
     sendGoal(text).then(function(ok){
       lastSent = text;
       save('eos-goal-sent', text);
@@ -200,18 +198,16 @@ body{
     });
   });
 
-  /* ввод: черновик + счётчик + возврат кнопки */
   input.addEventListener('input', function(){
     save('eos-goal-text', input.value);
     updateCounter();
     updateBtn();
   });
 
-  /* восстановление при возврате к блоку */
   input.value = load('eos-goal-text') || '';
   updateCounter();
   if (input.value.trim() && input.value.trim() === lastSent){
-    showSaved(true);               /* вернулся к уже сохранённой цели */
+    showSaved(true);
   } else {
     updateBtn();
   }
